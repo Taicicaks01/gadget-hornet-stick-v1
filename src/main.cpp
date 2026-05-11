@@ -13,11 +13,22 @@
 #include <Wire.h>
 #include "config.h"
 #include "DisplayManager.h"
+#include "OSDManager.h"
 #include "SensorManager.h"
 #include "IRManager.h"
 #include "ButtonManager.h"
 #include "RFAnalyzerManager.h"
 #include "WiFiRepeaterManager.h"
+#include "AppManager.h"
+#include "EventManager.h"
+#include "TaskScheduler.h"
+#include "SafeMode.h"
+#include "SystemInfo.h"
+#include "GlobalLogger.h"
+#include "FileExplorer.h"
+#include "BootManager.h"
+#include "EyeAnimation.h"
+// OSD app registered locally below to avoid linker ordering issues
 #include <LittleFS.h>
 
 /**
@@ -57,13 +68,20 @@ enum SystemState {
     STATE_REPEATER_SAVED_NETS,
     STATE_REPEATER_DEL_CONFIRM,
     STATE_REPEATER_AP_CONFIG,
-    STATE_REPEATER_AP_KB
+    STATE_REPEATER_AP_KB,
+    STATE_OSD_MENU,
+    STATE_OSD_CUSTOM_TEXT,
+    STATE_OSD_RUNNING_TEXT,
+    STATE_OSD_EYE_ANIMATION,
+    STATE_SETTINGS_MENU,
+    STATE_SETTINGS_SCREEN_SLEEP
 };
 
 SystemState currentState = STATE_BOOT;
 WiFiRepeaterManager repeaterManager;
 
 unsigned long lastDisplayUpdate = 0;
+unsigned long lastInteractionTime = 0;
 int menuIndex = 0;
 int rulerOffset = 0;
 
@@ -89,6 +107,61 @@ bool repDelConfirmYes = false;
 int repApConfigIndex = 0;
 int repApKbTarget = 0;
 
+bool displaySleeping = false;
+
+static const int MAIN_MENU_ITEM_COUNT = 7;
+static const AppId_t APP_OSD_MENU = 1;
+static const AppId_t APP_OSD_RUNNING_TEXT = 2;
+static const AppId_t APP_OSD_EYE_ANIMATION = 3;
+static EyeAnimation* eyeAnimation = nullptr;
+
+static bool shouldAllowSleep(SystemState state) {
+    switch (state) {
+        case STATE_NORMAL:
+        case STATE_MAIN_MENU:
+        case STATE_IR_MENU:
+        case STATE_RF_MENU:
+        case STATE_REPEATER_MENU:
+        case STATE_REPEATER_SAVED_NETS:
+        case STATE_REPEATER_DEL_CONFIRM:
+        case STATE_OSD_MENU:
+        case STATE_OSD_RUNNING_TEXT:
+        case STATE_OSD_CUSTOM_TEXT:
+        case STATE_OSD_EYE_ANIMATION:
+        case STATE_SETTINGS_MENU:
+        case STATE_SETTINGS_SCREEN_SLEEP:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static void wakeDisplay() {
+    if (displaySleeping) {
+        displayManager.setDisplaySleep(false);
+        displaySleeping = false;
+    }
+}
+
+static void touchActivity() {
+    lastInteractionTime = millis();
+    wakeDisplay();
+}
+
+static void updateDisplaySleepState() {
+    if (!osdManager.isSleepEnabled() || !shouldAllowSleep(currentState)) {
+        wakeDisplay();
+        return;
+    }
+
+    if (millis() - lastInteractionTime >= osdManager.getSleepTimeoutMs()) {
+        if (!displaySleeping) {
+            displayManager.setDisplaySleep(true);
+            displaySleeping = true;
+        }
+    }
+}
+
 void setup() {
     Serial.begin(115200);
     Serial.println("\nMemulai Sistem V1 Modular...");
@@ -98,17 +171,70 @@ void setup() {
         Serial.println("LittleFS Mount Failed");
     }
 
+    // Initialize core managers
+    eventManager.begin();
+    taskScheduler.begin();
+    globalLogger.begin();
+    fileExplorer.begin();
+    systemInfo.begin();
+    appManager.begin();
+    // Register core apps
+    static const AppInterface osdAppLocal = {
+        .id = APP_OSD_MENU,
+        .name = "Onscreen Display",
+        .onEnter = [](){ osdManager.onEnterMenu(); },
+        .update = [](){ osdManager.update(); },
+        .render = [](){ osdManager.render(); },
+        .onExit = [](){ osdManager.onExit(); }
+    };
+    appManager.registerApp(&osdAppLocal);
+    static const AppInterface osdRunningTextApp = {
+        .id = APP_OSD_RUNNING_TEXT,
+        .name = "Running Text",
+        .onEnter = [](){ osdManager.onEnterRunningText(); },
+        .update = [](){ osdManager.update(); },
+        .render = [](){ osdManager.render(); },
+        .onExit = [](){ osdManager.onExitRunningText(); }
+    };
+    appManager.registerApp(&osdRunningTextApp);
+    static const AppInterface osdEyeAnimationApp = {
+        .id = APP_OSD_EYE_ANIMATION,
+        .name = "Eye Animation",
+        .onEnter = [](){ if (eyeAnimation) eyeAnimation->setExpression(EyeAnimation::Idle); osdManager.onEnterEyeAnimation(); },
+        .update = [](){ if (eyeAnimation) eyeAnimation->update(); },
+        .render = [](){ if (eyeAnimation) eyeAnimation->render(); },
+        .onExit = [](){ osdManager.onExit(); }
+    };
+    appManager.registerApp(&osdEyeAnimationApp);
+
+    osdManager.begin();
+    eyeAnimation = new EyeAnimation(displayManager.getDisplay());
+    if (eyeAnimation) {
+        eyeAnimation->begin();
+        eyeAnimation->setExpression(EyeAnimation::Idle);
+    }
+
     // WHY: Initialize I2C bus at 400kHz for optimal OLED and sensor throughput.
     Wire.begin(); 
     Wire.setClock(400000);
     // Inisialisasi Modul
     buttonManager.init();
+
+    // Safe mode detection (button held at boot)
+    safeMode.begin();
+
+    bootManager.begin();
+    bootManager.runChecks();
+
     rfManager.init();
     
     if(!displayManager.init()) {
         Serial.println("Gagal menemukan layar OLED SSD1306");
         while(1) delay(10);
     }
+
+    displayManager.setDisplaySleep(false);
+    lastInteractionTime = millis();
 
     if(!sensorManager.initBME()) {
         Serial.println("Gagal menemukan BME280!");
@@ -127,6 +253,32 @@ void setup() {
 }
 
 void loop() {
+    bool anyButtonPressed = buttonManager.isUpPressed() || buttonManager.isDownPressed() || buttonManager.isLeftPressed() || buttonManager.isRightPressed() || buttonManager.isOKPressed();
+    if (anyButtonPressed) {
+        touchActivity();
+    }
+
+    updateDisplaySleepState();
+
+    // Core tickers
+    taskScheduler.update();
+    eventManager.process();
+    appManager.update();
+    if (currentState == STATE_OSD_RUNNING_TEXT && appManager.getActiveApp()) {
+        if (millis() - lastDisplayUpdate > 66) {
+            lastDisplayUpdate = millis();
+            appManager.render();
+        }
+    }
+
+    // Serial debug: press 'b' to dump BME readings directly
+    if (Serial.available()) {
+        int c = Serial.read();
+        if (c == 'b' || c == 'B') {
+            sensorManager.debugDump();
+        }
+    }
+
     // WHY: We use a global switch-case for State Management.
     // This pattern ensures only one module's complex logic runs at a time,
     // which is critical for the single-core ESP8266 performance.
@@ -145,6 +297,7 @@ void loop() {
                 currentState = STATE_MAIN_MENU;
                 menuIndex = 0;
                 displayManager.drawMainMenu(menuIndex); // Draw segera
+                touchActivity();
                 break;
             }
 
@@ -172,36 +325,63 @@ void loop() {
         case STATE_MAIN_MENU:
             if (buttonManager.isUpJustPressed()) {
                 menuIndex--;
-                if(menuIndex < 0) menuIndex = 4; // Wrap around to max 4
+                if(menuIndex < 0) menuIndex = MAIN_MENU_ITEM_COUNT - 1;
                 displayManager.drawMainMenu(menuIndex);
+                touchActivity();
             }
             if (buttonManager.isDownJustPressed()) {
                 menuIndex++;
-                if(menuIndex > 4) menuIndex = 0; // Wrap around to 0
+                if(menuIndex > MAIN_MENU_ITEM_COUNT - 1) menuIndex = 0;
                 displayManager.drawMainMenu(menuIndex);
+                touchActivity();
             }
             if (buttonManager.isLeftJustPressed()) {
                 // Kembali ke Dashboard
                 currentState = STATE_NORMAL;
+                displayManager.drawDashboard(
+                    sensorManager.getTemp(),
+                    sensorManager.getHum(),
+                    sensorManager.getPres(),
+                    sensorManager.getAltitude(),
+                    sensorManager.getBatteryPercent()
+                );
+                touchActivity();
             }
             if (buttonManager.isOKJustPressed() || buttonManager.isRightJustPressed()) {
                 if (menuIndex == 0) {
+                    currentState = STATE_NORMAL;
+                    displayManager.drawDashboard(
+                        sensorManager.getTemp(),
+                        sensorManager.getHum(),
+                        sensorManager.getPres(),
+                        sensorManager.getAltitude(),
+                        sensorManager.getBatteryPercent()
+                    );
+                } else if (menuIndex == 1) {
                     currentState = STATE_RULER;
                     rulerOffset = 0; // Reset offset tiap masuk
-                } else if (menuIndex == 1) {
+                } else if (menuIndex == 2) {
                     currentState = STATE_IR_MENU;
                     irMenuIndex = 0;
                     displayManager.drawIRMenu(irMenuIndex);
-                } else if (menuIndex == 2) {
+                } else if (menuIndex == 3) {
                     currentState = STATE_RF_MENU;
                     rfMenuIndex = 0;
                     displayManager.drawRFMenu(rfMenuIndex);
-                } else if (menuIndex == 3) {
+                } else if (menuIndex == 4) {
                     currentState = STATE_REPEATER_MENU;
                     repMenuIndex = 0;
                     displayManager.drawRepeaterMenu(repMenuIndex, repeaterManager.hasSavedNetworks());
+                } else if (menuIndex == 5) {
+                    currentState = STATE_OSD_MENU;
+                    osdManager.onEnterMenu();
+                    displayManager.drawOSDMenu(osdManager.getMenuIndex());
+                } else if (menuIndex == 6) {
+                    currentState = STATE_SETTINGS_MENU;
+                    osdManager.onEnterSettingsMenu();
+                    displayManager.drawSettingsMenu(0);
                 }
-                // (Untuk index 4 (Settings) biarkan sementara belum ada state-nya)
+                touchActivity();
             }
             break;
 
@@ -469,6 +649,144 @@ void loop() {
             if (millis() - lastDisplayUpdate > 500) {
                 lastDisplayUpdate = millis();
                 displayManager.drawRFLogViewer("rf_event.txt", "T:1000 R:-50", "P:20 S:CLEAN", "-----------");
+            }
+            break;
+
+        case STATE_OSD_MENU:
+            if (buttonManager.isUpJustPressed()) {
+                osdManager.menuUp();
+                displayManager.drawOSDMenu(osdManager.getMenuIndex());
+            }
+            if (buttonManager.isDownJustPressed()) {
+                osdManager.menuDown();
+                displayManager.drawOSDMenu(osdManager.getMenuIndex());
+            }
+            if (buttonManager.isLeftJustPressed()) {
+                appManager.stopActive();
+                currentState = STATE_MAIN_MENU;
+                displayManager.drawMainMenu(menuIndex);
+            }
+            if (buttonManager.isOKJustPressed() || buttonManager.isRightJustPressed()) {
+                if (osdManager.getMenuIndex() == 0) {
+                    currentState = STATE_OSD_CUSTOM_TEXT;
+                    osdManager.onEnterCustomText();
+                    osdManager.render();
+                } else if (osdManager.getMenuIndex() == 1) {
+                    appManager.switchTo(APP_OSD_RUNNING_TEXT);
+                    currentState = STATE_OSD_RUNNING_TEXT;
+                    lastDisplayUpdate = 0;
+                } else {
+                    appManager.switchTo(APP_OSD_EYE_ANIMATION);
+                    currentState = STATE_OSD_EYE_ANIMATION;
+                    if (eyeAnimation) {
+                        eyeAnimation->setExpression(EyeAnimation::Idle);
+                        eyeAnimation->render();
+                    }
+                }
+            }
+            break;
+
+        case STATE_OSD_CUSTOM_TEXT:
+            static unsigned long osdHoldOkTime = 0;
+            if (buttonManager.isUpJustPressed()) {
+                osdManager.editorUp();
+                osdManager.render();
+            }
+            if (buttonManager.isDownJustPressed()) {
+                osdManager.editorDown();
+                osdManager.render();
+            }
+            if (buttonManager.isRightJustPressed()) {
+                osdManager.editorRight();
+                osdManager.render();
+            }
+            if (buttonManager.isLeftJustPressed()) {
+                osdManager.editorBackspace();
+                if (strlen(osdManager.getCustomText()) == 0) {
+                    osdManager.onEnterMenu();
+                    currentState = STATE_OSD_MENU;
+                    displayManager.drawOSDMenu(osdManager.getMenuIndex());
+                } else {
+                    osdManager.render();
+                }
+            }
+            if (buttonManager.isOKJustPressed()) {
+                osdManager.editorInsert();
+                osdManager.render();
+            }
+            if (buttonManager.isOKPressed()) {
+                if (osdHoldOkTime == 0) osdHoldOkTime = millis();
+                if (millis() - osdHoldOkTime > 2000) {
+                    osdHoldOkTime = 0;
+                    if (osdManager.editorHoldSave()) {
+                        displayManager.showMessage("Saved OSD Text");
+                        osdManager.onEnterMenu();
+                        currentState = STATE_OSD_MENU;
+                        displayManager.drawOSDMenu(osdManager.getMenuIndex());
+                    }
+                }
+            } else {
+                osdHoldOkTime = 0;
+            }
+            break;
+
+        case STATE_OSD_RUNNING_TEXT:
+            if (buttonManager.isLeftJustPressed() || buttonManager.isRightJustPressed()) {
+                appManager.stopActive();
+                currentState = STATE_OSD_MENU;
+                displayManager.drawOSDMenu(osdManager.getMenuIndex());
+            }
+            if (buttonManager.isOKJustPressed()) {
+                osdManager.runningTogglePause();
+            }
+            break;
+
+        case STATE_OSD_EYE_ANIMATION:
+            if (buttonManager.isLeftJustPressed()) {
+                appManager.stopActive();
+                currentState = STATE_OSD_MENU;
+                osdManager.onEnterMenu();
+                displayManager.drawOSDMenu(osdManager.getMenuIndex());
+            }
+            if (millis() - lastDisplayUpdate > 200) {
+                lastDisplayUpdate = millis();
+                if (eyeAnimation) {
+                    eyeAnimation->update();
+                    eyeAnimation->render();
+                }
+            }
+            break;
+
+        case STATE_SETTINGS_MENU:
+            if (buttonManager.isLeftJustPressed()) {
+                osdManager.onExit();
+                currentState = STATE_MAIN_MENU;
+                displayManager.drawMainMenu(menuIndex);
+            }
+            if (buttonManager.isOKJustPressed() || buttonManager.isRightJustPressed()) {
+                currentState = STATE_SETTINGS_SCREEN_SLEEP;
+                osdManager.onEnterScreenSleep();
+                displayManager.drawScreenSleepMenu(osdManager.isSleepEnabled(), osdManager.getSleepTimeoutMs());
+            }
+            break;
+
+        case STATE_SETTINGS_SCREEN_SLEEP:
+            if (buttonManager.isLeftJustPressed()) {
+                osdManager.onEnterSettingsMenu();
+                currentState = STATE_SETTINGS_MENU;
+                displayManager.drawSettingsMenu(0);
+            }
+            if (buttonManager.isOKJustPressed()) {
+                osdManager.sleepToggleEnabled();
+                displayManager.drawScreenSleepMenu(osdManager.isSleepEnabled(), osdManager.getSleepTimeoutMs());
+            }
+            if (buttonManager.isUpJustPressed()) {
+                osdManager.sleepTimeoutUp();
+                displayManager.drawScreenSleepMenu(osdManager.isSleepEnabled(), osdManager.getSleepTimeoutMs());
+            }
+            if (buttonManager.isDownJustPressed()) {
+                osdManager.sleepTimeoutDown();
+                displayManager.drawScreenSleepMenu(osdManager.isSleepEnabled(), osdManager.getSleepTimeoutMs());
             }
             break;
 

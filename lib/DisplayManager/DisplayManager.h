@@ -45,6 +45,7 @@ public:
      * @brief Render the main scrollable menu.
      */
     void drawMainMenu(int selectedIndex);
+    void drawOSDMenu(int selectedIndex);
 
     /**
      * @brief Render the Smart Ruler UI.
@@ -82,6 +83,14 @@ public:
     void drawRepeaterConfigMenu(int selectedIndex, const String& ssid, const String& pass, bool isWpa2, bool isHidden);
     void drawSavedNetworksMenu(int selectedIndex, int total, const String& ssidName);
     void drawDeleteConfirmMenu(const String& ssidName, bool isYesSelected);
+
+    void drawOSDCustomTextEditor(const char* text, int kx, int ky);
+    void drawOSDRunningText(const char* text, int scrollOffset, uint16_t speedMs, bool repeatMode, uint8_t spacingPx, bool paused, bool centeredMode);
+    void drawOSDEyeAnimationStub(uint8_t blinkPhase);
+    void drawSettingsMenu(int selectedIndex);
+    void drawScreenSleepMenu(bool enabled, uint32_t timeoutMs);
+    void setDisplaySleep(bool enabled);
+    Adafruit_SSD1306* getDisplay();
 
     /**
      * @brief Show "SENDING..." overlay for IR transmission.

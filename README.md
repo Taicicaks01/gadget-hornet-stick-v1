@@ -13,6 +13,7 @@ Dibangun dengan arsitektur *non-blocking state machine*, perangkat ini mampu men
 3.  **📡 Universal IR Tools**: Kemampuan untuk melakukan cloning remote IR, pengujian protokol, dan simulasi sinyal.
 4.  **📉 2.4GHz RF Analyzer**: Pemindai spektrum WiFi untuk mendeteksi paket, heatmap saluran, dan deteksi lonjakan sinyal (Spike Detection).
 5.  **🔁 WiFi Repeater**: Router portabel dengan fitur NAPT (Network Address Port Translation), DNS Proxy, dan *Transfer Monitor* heuristik.
+6.  **✨ Onscreen Display**: Sistem visual OLED untuk custom text, running text, dan placeholder eye animation.
 
 ---
 
@@ -85,7 +86,8 @@ Setiap aplikasi mengikuti alur lifecycle yang ketat:
 ---
 
 ## 🗺️ Future Roadmap
-- [ ] Implementasi **Settings Menu** untuk kustomisasi kecerahan dan timeout.
+- [ ] Implementasi **Screen Sleep / Display Control** lanjutan.
+- [ ] Ekspansi **Onscreen Display** untuk animasi visual yang lebih kompleks.
 - [ ] Penambahan modul **Bluetooth Scanner** (Untuk ESP32 variant).
 - [ ] Support **Multiple IR Profiles** dari file LittleFS.
 - [ ] Optimasi **Deep Sleep Mode** untuk penghematan baterai.
@@ -105,3 +107,11 @@ Project ini dirancang untuk dikembangkan oleh AI asisten masa depan. Sila baca p
 - **[ID] [AI Development Guide](./AI_DEVELOPMENT_GUIDE.md)**
 - **[EN] [AI Development Guide](./EN_AI_DEVELOPMENT_GUIDE.md)**
 - **[Full Documentation Suite Index](./AI_DEVELOPMENT_GUIDE.md)**
+
+---
+
+## 🧩 Core System Expansion (v2.x)
+Mulai v2.2 proyek ini mengadopsi beberapa core manager untuk membuat firmware terasa sebagai mini embedded OS:
+- `AppManager`, `EventManager`, `TaskScheduler`, `SafeMode`, `SystemInfo`, `GlobalLogger`, `FileExplorer`, `BootManager`.
+
+Tujuan utama adalah menjaga modularitas, menghindari spaghetti code, dan menyediakan infrastruktur non-blocking yang ramah ESP8266.

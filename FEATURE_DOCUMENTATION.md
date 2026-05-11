@@ -43,13 +43,27 @@ Router mini portabel.
 - **Config Storage**: Profil jaringan disimpan di `/config/net_X.cfg`. Pengaturan AP (SSID/Pass) disimpan di `/config/ap_config.cfg`.
 - **Security**: Mendukung mode WPA2-PSK dan OPEN (tanpa password).
 
+## 6. Onscreen Display ✨
+Sistem visual OLED untuk mode estetika dan presentasi status.
+- **Submenu**:
+  - **Custom Text**: Menampilkan teks fullscreen yang disimpan ke `/config/osd_text.txt`.
+  - **Running Text**: Animasi scrolling fullscreen terminal-style non-blocking dengan refresh 10–20 FPS.
+  - **Eye Animation**: Placeholder animasi mata untuk pengembangan visual lanjutan.
+- **Settings Integration**: Screen sleep dikontrol dari menu Settings dan disimpan di `/config/display.cfg`.
+- **Render Strategy**: Menggunakan refresh ringan berbasis `millis()` agar tidak mengganggu radio, sensor, atau repeater.
+- **Fullscreen Lifecycle**: Saat Running Text aktif, renderer menyembunyikan header, footer, status bar, dan overlay UI lain; layar hanya menampilkan animasi teks berjalan.
+- **Partial Redraw**: Fullscreen mode melakukan clear sekali saat masuk lalu hanya me-redraw band animasi untuk mengurangi artifact, flicker, dan overlap framebuffer.
+- **Button Behavior**: `LEFT`/`RIGHT` keluar dari fullscreen animation, `OK` pause/resume.
+
 ---
 
 ### Integrasi LittleFS
 Sistem menggunakan LittleFS untuk persistensi data:
 - **Konfigurasi**: Disimpan dalam format teks sederhana agar ringan saat dibaca.
 - **Logging**: Digunakan oleh RF Analyzer untuk mencatat event penting di `/rf/`.
+- **OSD**: Menyimpan custom text dan display settings di `/config/osd_text.txt` dan `/config/display.cfg`.
 
 ### Batasan ESP8266
 - **Single Radio**: Anda tidak bisa menjalankan WiFi Repeater dan RF Analyzer secara bersamaan. Salah satu harus mengalah dan mematikan radio sebelum yang lain bisa mulai.
 - **CPU Speed**: Rendering OLED dilakukan secara parsial untuk mencegah stuttering saat trafik jaringan tinggi.
+- **Display Sleep**: Hanya aktif saat dashboard/menu idle; otomatis dimatikan saat running text atau mode realtime aktif.

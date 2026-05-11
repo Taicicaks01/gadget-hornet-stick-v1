@@ -40,3 +40,30 @@ Seluruh perubahan besar pada proyek Gadget V1 dicatat di sini.
 - **v2.1**: Implementasi Settings Menu (Brightness, Timeout).
 - **v2.2**: Support SD Card (via SPI) untuk logging data dalam jumlah besar.
 - **v3.0**: Porting ke ESP32 untuk dual-core support dan Bluetooth scanning.
+
+## [v2.1] - 2026-05-11
+### Added
+- **Onscreen Display Module**:
+  - Custom Text fullscreen dengan penyimpanan LittleFS.
+  - Running Text non-blocking dengan speed, repeat, spacing, dan centered mode.
+  - Eye Animation placeholder untuk pengembangan visual lanjutan.
+- **Settings Expansion**:
+  - Screen Sleep enable/disable.
+  - Sleep timeout berbasis LittleFS.
+- **OSDManager** sebagai modul baru di `/lib/OSDManager/`.
+
+## [v2.2] - 2026-05-12
+### Added
+- **Core System Expansion**: Introduced modular OS infrastructure
+  - `AppManager`, `EventManager`, `TaskScheduler`, `SafeMode`, `SystemInfo`, `GlobalLogger`, `FileExplorer`, `BootManager`.
+  - Non-blocking event bus and millis-based scheduler.
+  - Lightweight logger to `/logs/` with rotation.
+  - File explorer with line-by-line preview to avoid large RAM usage.
+
+### Notes
+- These components focus on modularity and resource ownership to avoid spaghetti firmware as features grow.
+
+### Improved
+- **Main Menu Structure**: Menambahkan Onscreen Display sebelum Settings.
+- **Display Strategy**: Tambahan rendering ringan untuk menu OSD dan sleep screen.
+- **Lifecycle Integration**: State baru mengikuti pola onEnter/update/render/onExit.

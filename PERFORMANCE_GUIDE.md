@@ -21,6 +21,9 @@ Strategi untuk menjaga performa maksimal pada hardware ESP8266 yang terbatas.
 - **Partial Refresh**: Hanya update area layar yang angkanya berubah.
 - **I2C Speed**: Pastikan `Wire.setClock(400000)` dipanggil untuk memaksimalkan bandwidth I2C.
 - **Minimize display.display()**: Mengirim buffer 1KB ke layar memakan waktu ~30-40ms. Jangan panggil lebih dari 20 kali per detik.
+- **Fullscreen Animation Strategy**: Untuk running text fullscreen, lakukan clear sekali saat masuk lalu redraw band animasi secara parsial; ini mengurangi artifact, overlap, dan framebuffer corruption.
+- **Refresh Cap**: Batasi animasi fullscreen ke 10–20 FPS (misal 66–100ms per frame) untuk menjaga smoothness dan menghemat CPU.
+- **No Overlay Noise**: Jangan menggambar header/footer/status bar ketika mode fullscreen aktif; hindari redraw UI lain saat animasi berjalan.
 
 ## 📡 WiFi Efficiency
 - **Power Save**: Matikan radio (`WiFi.mode(WIFI_OFF)`) saat sedang tidak menggunakan fitur radio (misal: saat di menu Dashboard atau Ruler) untuk menghemat baterai dan mengurangi panas chip.

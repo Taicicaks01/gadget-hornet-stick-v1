@@ -49,6 +49,37 @@ void SensorManager::update() {
     else currentBattery = (int)((vBatt - 3.2) * 100.0);
 }
 
+void SensorManager::debugDump() {
+    if (!bme.begin(I2C_BME)) {
+        Serial.println("BME not found on I2C_BME");
+        return;
+    }
+    float t = bme.readTemperature();
+    float h = bme.readHumidity();
+    float p = bme.readPressure(); // Pa
+    float p_hpa = p / 100.0F;
+    float alt = bme.readAltitude(1013.25);
+
+    Serial.println(F("--- BME Debug Dump ---"));
+    Serial.print(F("Temperature: "));
+    Serial.print(t, 2);
+    Serial.println(F(" *C"));
+
+    Serial.print(F("Humidity: "));
+    Serial.print(h, 2);
+    Serial.println(F(" %"));
+
+    Serial.print(F("Pressure: "));
+    Serial.print(p_hpa, 2);
+    Serial.println(F(" hPa"));
+
+    Serial.print(F("Altitude(1013.25 hPa): "));
+    Serial.print(alt, 2);
+    Serial.println(F(" m"));
+
+    Serial.println(F("----------------------"));
+}
+
 float SensorManager::getTemp() const { return currentTemp; }
 float SensorManager::getHum() const { return currentHum; }
 float SensorManager::getPres() const { return currentPres; }

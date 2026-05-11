@@ -2,6 +2,7 @@
 #include "config.h"
 #include "assets.h"
 #include <LittleFS.h>
+#include <string.h>
 
 DisplayManager displayManager;
 
@@ -12,6 +13,7 @@ bool DisplayManager::init() {
         return false;
     }
     display.setTextColor(SSD1306_WHITE);
+    display.setTextWrap(false);
     return true;
 }
 
@@ -136,12 +138,12 @@ void DisplayManager::drawMainMenu(int selectedIndex) {
 
     // --- DAFTAR MENU ---
     display.setTextSize(1);
-    const char* items[] = {"1. Penggaris", "2. IR Cloner", "3. 2.4GHz RF", "4. WiFi Repeater", "5. Settings"};
+    const char* items[] = {"1. ENV Dashboard", "2. Smart Ruler", "3. IR Tools", "4. 2.4GHz Analyzer", "5. WiFi Repeater", "6. Onscreen Display", "7. Settings"};
     
     // Calculate display window (show 4 items max)
     int startIdx = selectedIndex - (selectedIndex % 4);
 
-    for(int i = 0; i < 4 && (startIdx + i) < 5; i++) {
+    for(int i = 0; i < 4 && (startIdx + i) < 7; i++) {
         int idx = startIdx + i;
         int y = 18 + (i * 12);
         if(idx == selectedIndex) {
@@ -152,6 +154,29 @@ void DisplayManager::drawMainMenu(int selectedIndex) {
         }
         display.setCursor(10, y);
         display.print(items[idx]);
+    }
+    display.display();
+}
+
+void DisplayManager::drawOSDMenu(int selectedIndex) {
+    display.clearDisplay();
+    display.fillRect(0, 0, SCREEN_WIDTH, 11, SSD1306_WHITE);
+    display.setTextColor(SSD1306_BLACK);
+    display.setTextSize(1);
+    display.setCursor(18, 2);
+    display.print(F("ONSCREEN DISPLAY"));
+
+    const char* items[] = {"1. Custom Text", "2. Running Text", "3. Eye Animation"};
+    for(int i = 0; i < 3; i++) {
+        int y = 18 + (i * 14);
+        if(i == selectedIndex) {
+            display.fillRect(0, y - 2, SCREEN_WIDTH, 11, SSD1306_WHITE);
+            display.setTextColor(SSD1306_BLACK);
+        } else {
+            display.setTextColor(SSD1306_WHITE);
+        }
+        display.setCursor(10, y);
+        display.print(items[i]);
     }
     display.display();
 }
@@ -297,6 +322,172 @@ void DisplayManager::drawFileManager(const String& filename, int fileIndex, int 
     display.setCursor(0, 54);
     display.print("< Back [OK]Send [^]Del");
     display.display();
+}
+
+void DisplayManager::drawOSDCustomTextEditor(const char* text, int kx, int ky) {
+    display.clearDisplay();
+    display.fillRect(0, 0, SCREEN_WIDTH, 11, SSD1306_WHITE);
+    display.setTextColor(SSD1306_BLACK);
+    display.setTextSize(1);
+    display.setCursor(20, 2);
+    display.print(F("CUSTOM TEXT"));
+
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0, 14);
+    display.print(text);
+
+    static const char keys[3][13] = {
+        "ABCDEFGHIJKL",
+        "MNOPQRSTUVWX",
+        "YZ0123456789"
+    };
+
+    for (int row = 0; row < 3; row++) {
+        int y = 34 + (row * 9);
+        for (int col = 0; col < 12; col++) {
+            int x = 2 + (col * 10);
+            if (col == kx && row == ky) {
+                display.fillRect(x - 1, y - 1, 9, 8, SSD1306_WHITE);
+                display.setTextColor(SSD1306_BLACK);
+            } else {
+                display.setTextColor(SSD1306_WHITE);
+            }
+            display.setCursor(x, y);
+            display.write(keys[row][col]);
+        }
+    }
+
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0, 58);
+    display.print(F("LEFT del  OK add  hold save"));
+    display.display();
+}
+
+void DisplayManager::drawOSDRunningText(const char* text, int scrollOffset, uint16_t speedMs, bool repeatMode, uint8_t spacingPx, bool paused, bool centeredMode) {
+    (void)repeatMode;
+    (void)speedMs;
+    (void)centeredMode;
+
+    // Fullscreen animation band: clear only the active band to avoid artifacts.
+    display.fillRect(0, 16, SCREEN_WIDTH, 32, SSD1306_BLACK);
+
+    const uint8_t textSize = 2;
+    const int charWidth = 6 * textSize;
+    const int textWidth = static_cast<int>(strlen(text)) * charWidth;
+    const int textHeight = 8 * textSize;
+    const int baselineY = (SCREEN_HEIGHT - textHeight) / 2 + 2;
+
+    display.setTextSize(textSize);
+    display.setTextColor(paused ? SSD1306_WHITE : SSD1306_WHITE);
+
+    int drawX = scrollOffset;
+    if (drawX < -textWidth - spacingPx) {
+        drawX = SCREEN_WIDTH;
+    }
+
+    display.setCursor(drawX, baselineY);
+    display.print(text);
+
+    // Draw a second copy only when the text needs spacing continuity.
+    if (textWidth < SCREEN_WIDTH || repeatMode) {
+        int nextX = drawX + textWidth + spacingPx;
+        if (nextX < SCREEN_WIDTH) {
+            display.setCursor(nextX, baselineY);
+            display.print(text);
+        }
+    }
+
+    display.display();
+}
+
+void DisplayManager::drawOSDEyeAnimationStub(uint8_t blinkPhase) {
+    display.clearDisplay();
+    display.fillRect(0, 0, SCREEN_WIDTH, 11, SSD1306_WHITE);
+    display.setTextColor(SSD1306_BLACK);
+    display.setTextSize(1);
+    display.setCursor(20, 2);
+    display.print(F("EYE ANIMATION"));
+
+    display.setTextColor(SSD1306_WHITE);
+    display.setTextSize(2);
+    display.setCursor(18, 20);
+    display.print(F("COMING"));
+    display.setCursor(26, 40);
+    display.print(F("SOON"));
+
+    if (blinkPhase) {
+        display.fillCircle(106, 32, 8, SSD1306_WHITE);
+        display.fillCircle(106, 32, 3, SSD1306_BLACK);
+    } else {
+        display.drawCircle(106, 32, 8, SSD1306_WHITE);
+        display.drawCircle(106, 32, 3, SSD1306_WHITE);
+    }
+    display.display();
+}
+
+void DisplayManager::drawSettingsMenu(int selectedIndex) {
+    display.clearDisplay();
+    display.fillRect(0, 0, SCREEN_WIDTH, 11, SSD1306_WHITE);
+    display.setTextColor(SSD1306_BLACK);
+    display.setTextSize(1);
+    display.setCursor(34, 2);
+    display.print(F("SETTINGS"));
+
+    const char* items[] = {"1. Screen Sleep"};
+    for(int i = 0; i < 1; i++) {
+        int y = 24;
+        if(i == selectedIndex) {
+            display.fillRect(0, y - 2, SCREEN_WIDTH, 11, SSD1306_WHITE);
+            display.setTextColor(SSD1306_BLACK);
+        } else {
+            display.setTextColor(SSD1306_WHITE);
+        }
+        display.setCursor(10, y);
+        display.print(items[i]);
+    }
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0, 54);
+    display.print(F("LEFT back   OK open"));
+    display.display();
+}
+
+void DisplayManager::drawScreenSleepMenu(bool enabled, uint32_t timeoutMs) {
+    display.clearDisplay();
+    display.fillRect(0, 0, SCREEN_WIDTH, 11, SSD1306_WHITE);
+    display.setTextColor(SSD1306_BLACK);
+    display.setTextSize(1);
+    display.setCursor(28, 2);
+    display.print(F("SCREEN SLEEP"));
+
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0, 18);
+    display.print(F("STATUS:"));
+    display.setCursor(48, 18);
+    display.print(enabled ? F("ON") : F("OFF"));
+
+    display.setCursor(0, 32);
+    display.print(F("TIMEOUT:"));
+    display.setCursor(54, 32);
+    display.print(timeoutMs / 1000);
+    display.print(F(" SEC"));
+
+    display.setCursor(0, 46);
+    display.print(F("UP/DN adjust  OK toggle"));
+    display.setCursor(0, 56);
+    display.print(F("LEFT back"));
+    display.display();
+}
+
+void DisplayManager::setDisplaySleep(bool enabled) {
+    if (enabled) {
+        display.ssd1306_command(SSD1306_DISPLAYOFF);
+    } else {
+        display.ssd1306_command(SSD1306_DISPLAYON);
+    }
+}
+
+Adafruit_SSD1306* DisplayManager::getDisplay() {
+    return &display;
 }
 void DisplayManager::drawRFMenu(int selectedIndex) {
     display.clearDisplay();

@@ -73,3 +73,13 @@ Gunakan path yang terorganisir:
 2. **Never block the loop**. Jika butuh waktu lama, gunakan state-machine internal di dalam modul tersebut.
 3. **Respect Memory**. Gunakan `F()` macro untuk string.
 4. **Cleanup on Exit**. Selalu matikan hardware yang tidak dipakai saat keluar modul.
+
+---
+
+## 🧭 Core System Expansion Notes (For AI)
+Saat menambah fitur baru, manfaatkan `AppManager`, `EventManager`, dan `TaskScheduler`:
+- **Register** app ke `AppManager` untuk lifecycle konsisten.
+- **Publish** events melalui `eventManager.publish()` daripada memanggil modul lain langsung.
+- **Schedule** background work via `taskScheduler.schedulePeriodic()` untuk menghindari penyebaran `millis()` checks.
+
+Hati-hati dengan RAM dan hindari penggunaan `String` besar; gunakan buffer statis bila perlu.

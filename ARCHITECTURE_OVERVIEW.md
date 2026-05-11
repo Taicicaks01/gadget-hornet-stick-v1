@@ -47,3 +47,13 @@ Kami menggunakan State Machine karena:
 1. **Determinisme**: Kita tahu persis apa yang sedang dijalankan oleh CPU.
 2. **RAM Efficiency**: Hanya modul yang relevan yang aktif, mengurangi penggunaan heap memory.
 3. **Navigasi Mudah**: Mempermudah implementasi tombol "Back" dan menu berlapis.
+
+---
+
+## 🚦 Core System Expansion
+Untuk meningkatkan skala dan modularitas, proyek menambahkan beberapa infrastruktur inti:
+- **EventManager**: Bus event ringan untuk publish/subscribe antar modul tanpa coupling langsung.
+- **TaskScheduler**: Scheduler millis()-based untuk periodic/delayed tasks non-blocking.
+- **AppManager**: Registry aplikasi dan lifecycle switcher untuk menjaga ownership resource.
+
+Komponen ini membantu memastikan kode tetap terstruktur saat fitur bertambah.

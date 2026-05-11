@@ -26,6 +26,7 @@ public:
     bool initBME();
     bool initToF();
     void update(); // Reads sensors and updates internal state
+    void debugDump(); // Print direct sensor readings to Serial
 
     float getTemp() const;
     float getHum() const;
